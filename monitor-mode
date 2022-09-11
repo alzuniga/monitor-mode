@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+##
+# SCRIPT: monitor-mode
+# AUTHOR: Al Zuniga
+# URL: https://github.com/alzuniga/monitor-mode
+# DESCRIPTION: Monitor mode faciliates toggling a network interface from
+#              'managed mode' to 'monitor mode'; or from 'monitor mode'
+#              to 'managed mode'.
+# USAGE: sudo monitor-mode [interface] [state]
+#        interface:        wlan0 | wlan1
+#        state:            on | off
+# License: MIT License [https://www.mit.edu/~amini/LICENSE.md]
+#          Released under MIT License
+#          Copyright (c) 2013 Mark Otto.
+#          Copyright (c) 2017 Andrew Fong.
+#
+#          Permission is hereby granted, free of charge, to any person
+#          obtaining a copy of this software and associated documentation files
+#          (the "Software"), to deal in the Software without restriction,
+#          including without limitation the rights to use, copy, modify, merge,
+#          publish, distribute, sublicense, and/or sell copies of the Software,
+#          and to permit persons to whom the Software is furnished to do so,
+#          subject to the following conditions:
+#
+#          The above copyright notice and this permission notice shall be
+#          included in all copies or substantial portions of the Software.
+#
+#          THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+#          EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+#          MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+#          NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+#          BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+#          ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+#          CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+##
+
+# Foreground text colors
+fg_green="\033[0;32m"
+fg_yellow="\033[0;214m"
+fg_red="\033[0;91m"
+fg_default="\033[0m"
+
+# Script Details
+PROGRAM_NAME="Monitor Mode"
+PROGRAM_VER="v1.0"
+PROGRAM_DESC="Monitor mode facilitates toggling a network interface from\nmanaged mode to monitor mode; or from monitor mode to managed mode. "
+PROGRAM_REQ="${fg_red}You must run $(basename $0) with super-user privileges!${fg_default}\nExample:\n\tsudo $(basename $0) wlan0 on"
+
+
+# Get wifi interfaces
+for i in `ip -br l | awk '$1 !~ "lo|eth|vir" { print $1 }'`; do
+  interfaces=("${interfaces[@]}" "$i");
+done
+
+
+# Display usage
+show_usage(){
+  echo -e "${fg_yellow}${PROGRAM_NAME} ${PROGRAM_VER} - ${PROGRAM_DESC}${fg_default} "
+  echo -e "Usage:\n\t$(basename $0) [interface] [state]\n"
+  echo -e "\tinterface:\t\t`echo ${interfaces[@]} | sed 's/ / | /g'`"
+  echo -e "\tstate:\t\t\ton | off\n"
+  exit 0
+}
+
+# Check if super-user/root
+if [[ $EUID -ne 0 ]]; then
+  echo -e "${PROGRAM_REQ}\n"
+  exit 0
+fi
+
+# Check for required arguments
+if [[ $# -lt 2 ]]; then
+  show_usage
+  exit 0
+fi
+
+# Check if supplied interface is valid
+# If supplied interface is invalid, an error message is displayed.
+if [[ $(echo "${interfaces[@]}" | grep -ow "$1" | wc -w) -ne 1 ]]; then
+  echo -e "${fg_red}[!] INVALID INTERFACE: '$1'!${fg_default}\n"
+  show_usage
+  exit 0
+fi
+
+# Check if supplied state is valid
+# If supplied state is valid, valid interface is toggled to that state.
+# Otherwise, an error message is displayed
+case "$2" in
+  on)
+    echo -e "${fg_green}[+] Stopping NetworkManager${fg_default}"
+    systemctl stop NetworkManager &&
+    sleep 3 
+
+    echo -e "${fg_green}[+] Stopping WPA_Supplicant${fg_default}"
+    systemctl stop wpa_supplicant &&
+    sleep 3
+
+    echo -e "${fg_green}[+] Bringing interface $1 down${fg_default}"
+    ip link set "$1" down &&
+    sleep 1
+
+    echo -e "${fg_green}[+] Enabling monitor mode on interface $1 ${fg_default}"
+    iwconfig "$1" mode monitor &&
+    sleep 1
+
+    echo -e "${fg_green}[+] Bringing interface $1 up${fg_default}"
+    ip link set "$1" up
+    sleep 1
+
+    echo -e "${fg_green}[+] Interface $1 is now in monitor mode${fg_default}"
+    echo
+    ;;
+    
+  off)
+    echo -e "${fg_green}[+] Bringing interface $1 down${fg_default}"
+    ip link set "$1" down &&
+    sleep 1
+
+    echo -e "${fg_green}[+] Enabling managed mode on interface $1 ${fg_default}"
+    iwconfig "$1" mode managed &&
+    sleep 1
+
+    echo -e "${fg_green}[+] Bringing interface $1 up${fg_default}"
+    ip link set "$1" up
+    sleep 1
+    
+    echo -e "${fg_green}[+] Starting WPA_Supplicant${fg_default}"
+    systemctl start wpa_supplicant &&
+    sleep 3
+    
+    echo -e "${fg_green}[+] Starting NetworkManager${fg_default}"
+    systemctl start NetworkManager &&
+    sleep 5 
+
+    echo -e "${fg_green}[+] Interface $1 is now in managed mode${fg_default}"
+    echo
+    ;;
+  *)
+    echo -e "${fg_red}[!] INVALID STATE: '$2'!\n${fg_default}"
+    show_usage
+    exit 0
+    ;;
+esac
