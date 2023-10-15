@@ -24,8 +24,8 @@ Monitor Mode is a bash script that facilitates toggling a network interface from
 
 ## INSTALLATION:
 ---
-    user@host:$ cd ./monitor-mode
     user@host:$ git clone https://github.com/alzuniga/monitor-mode.git
+    user@host:$ cd ./monitor-mode
     user@host:$ sudo chmod 700 monitor-mode
     user@host:$ sudo chown root:root monitor-mode
     user@host:$ sudo mv monitor-mode /usr/local/bin/monitor-mode
